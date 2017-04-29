@@ -1,8 +1,18 @@
-/* machine.cpp - A software emulated hypothetical computer in 'c'
+/* machine.cpp - A software emulated hypothetical computer in 'c++'
  * This project is part of a teaching/learning experience to implement a
  * fairly simple 32 bit computer architecture in the 'c' language.  
- *  Procedure oriented and in-line code rather than class oriented code 
+ * Procedure oriented and in-line code rather than class oriented code 
  * is used quite a bit for speed.*/
+ 
+ /* change history
+ 4/16/17 - change the stack to build downward
+ 4/16/17 - add 'test' command to run test code in cpu
+ 4/16/17 - adopt int32_t for machine registers, instructions and memory
+ 4/19/17 - shuffle classes, registers now private in CPU
+ 4/28/17 - improve UI allow multiple args on command line
+ 4/28/17 - stub out the first level instruction decode
+ 
+ */
  
  #include <stdio.h>
  #include <stdlib.h>
@@ -17,8 +27,11 @@
 #define INSTRUCTION_NOT_IMPLEMENTED 2  // defined but not implemented yet
 
 /*  Global Variables  - For speed */
-long int Regs[NUM_REGISTERS];
-long int Memory[MEMORY_SIZE];
+
+int32_t Memory[MEMORY_SIZE];
+
+
+ 
 
 // Prototype class definitions
 class CPU;
@@ -34,11 +47,21 @@ class CPU
 		CPU();	// Constructor
 		int Step(); // Step the CPU single instruction step
 		int Run(); // Run the CPU
-		int Execute(int instruction); // Execute an instruction
-		int ProcessX7(int instruction); // Process X7 non-zero instructions
-		int ProcessX6(int instruction); // Process X6 non-zero instructions
+		int Test() ; // Run whatever code is in the test section
+		int32_t Get_register_value (int register_number) ; // get value
+		int Store_value_in_register(int register_number, int32_t value) ; // store value
+
+
 	private:
 
+		int32_t Regs[NUM_REGISTERS];
+		int Execute  (int32_t instruction); // Execute an instruction
+		int ProcessX7(int32_t instruction); // Process X7 non-zero instructions
+		int ProcessX6(int32_t instruction); // Process X6 non-zero instructions
+		int ProcessX5(int32_t instruction); // Process X5 non-zero instructions
+		int ProcessX4(int32_t instruction); // Process X4 non-zero instructions
+		int ProcessX3(int32_t instruction); // Process X3 non-zero instructions
+		int ProcessX2(int32_t instruction); // Process X2 non-zero instructions				
 };
 	
 // CPU constructor  - set up object and clear memory and registers
@@ -52,6 +75,18 @@ CPU::CPU(void)
 		Memory[i] = 0;
 	};	
 };
+// CPU method to obtain register value (no value checking, do externally)
+int32_t CPU::Get_register_value(int register_number) {
+
+		return (Regs[ register_number ]);
+
+}
+
+// CPU method to store a value in a register (no value checking, do externally)
+int CPU::Store_value_in_register (int register_number, int32_t value) {
+	Regs [register_number] = value ;
+	return 0 ;
+}
 
 // CPU method to handle instruction single step
 int CPU::Step(void) {
@@ -64,41 +99,58 @@ int CPU::Step(void) {
 }
 
 // CPU method to execute an instruction
-int CPU::Execute(int instruction){
+int CPU::Execute(int32_t instruction){
 	
 // look for non-zero X7 digit (high order hex digit)
-	if ( (instruction || 0xF0000000) != 0 ){ // look for non_zero X7
+	if ( (instruction & 0xF0000000) != 0 ){ // look for non_zero X7
 		return ProcessX7(instruction);
 	}
 // look for non-zero X6 digit 
-	if ( (instruction || 0x0F000000) != 0 ){ // look for non_zero X7
+	if ( (instruction & 0x0F000000) != 0 ){ // look for non_zero X6
 		return ProcessX6(instruction);	
 	}
-	// Rest of decode goes here *************************************
+// look for non-zero X5 digit
+	if ( (instruction & 0x00F00000) != 0) { // look for non_zero X5
+		return ProcessX5(instruction);
+	}	
+// look for non-zero X4 digit
+	if ( (instruction & 0x000F0000) != 0) { // look for non-zero X4
+		return ProcessX4(instruction);
+	}
+	
+// look for non-zero X3 digit
+	if ( (instruction & 0x0000F000) != 0) { // look for non-zero X3
+		return ProcessX3(instruction);
+	}
+	
+// look for non-zero X2 digit
+	if ( (instruction & 0x00000F00) != 0) { // look for non-zero X2
+		return ProcessX2(instruction);
+	}	
+
+
 	return INSTRUCTION_NOT_IMPLEMENTED;
 }
 // CPU method to handle X7 != 0 (Memory reference instructions)
-int CPU::ProcessX7(int instruction) {
-	
-
+int CPU::ProcessX7(int32_t instruction) {
 	
 	printf ("Instruction decoded as X7 %08X instruction \n");
 
 	int code = (instruction >> 28) & 0x0000000F ;// get op code
-	printf("Hex code X7 is %08X \n",code);
+	printf("Hex code X7 is %01X \n",code);
 	
 	int idx_reg = (instruction >> 24) & 0x0000000F ; // get index reg
-	printf("Index register iis 08X \n",idx_reg);
+	printf("Index register iis %01X \n",idx_reg);
 	
 	int dest_reg = (instruction >> 20) & 0x0000000F ; // get destination
-	printf("Destination register is 08X \n",dest_reg);
+	printf("Destination register is %01X \n",dest_reg);
 	
-	int address = instruction & 0x000FFFFF ;// base address from instruction
-	printf("Base address is 08X \n",address);
+	int32_t address = instruction & 0x000FFFFF ;// base address from instruction
+	printf("Base address is %08X \n",address);
 	
 	if (idx_reg != 0) { // compute effective address
 		address = address +  Regs[idx_reg] ;
-		printf("After index, address is 08X \n",address);
+		printf("After index, address is %08X \n",address);
 	}
 	
 	// decode the instruction using a switch statement
@@ -128,8 +180,8 @@ int CPU::ProcessX7(int instruction) {
 		
 		}
 		case 6: { // call
+			Regs [SP_REGISTER]-- ; // decrement the stack pointer
 			Memory [ Regs [SP_REGISTER] ] = Regs [PCR_REGISTER]; // store return
-			Regs [SP_REGISTER]++ ; // bump the stack pointer
 			Regs [PCR_REGISTER] = address ; // transfer to address
 			return 0; // return OK to bypasss PCR increment
 		}
@@ -143,26 +195,25 @@ int CPU::ProcessX7(int instruction) {
 }
 
 // CPU method to handle X6 != 0 (Immediate instructions)
-int CPU::ProcessX6(int instruction) {
-	
+int CPU::ProcessX6(int32_t instruction) {
 
-	
-	printf ("Instruction decoded as X6 %08X instruction \n");
+
+	printf ("Instruction decoded as X6 %08X instruction \n",instruction);
 
 	int code = (instruction >> 24) & 0x0000000F ;// get op code
-	printf("Hex code X6 is %08X \n",code);
+	printf("Hex code X6 is %01X \n",code);
 
 	int dest_reg = (instruction >> 20) & 0x0000000F ; // get destination
 	printf("Destination register is 08X \n",dest_reg);
 	
-	int value = instruction & 0x000FFFFF ;// immediate value from instruction
+	int32_t value = instruction & 0x000FFFFF ;// immediate value from instruction
 
-	int signed_value = value ; // first assume non negative
+	int32_t signed_value = value ; // first assume non negative
 	if ( (value & 0x0008000) != 0) { // short number is negative
 		signed_value = signed_value || 0xFFF ; // extend sign
 	}
-	printf("Value is 08X \n",value);
-	printf("Value with sign is \n",signed_value) ;
+	printf("Value is %08X \n",value);
+	printf("Value with sign is %08X \n",signed_value) ;
 	
 	
 	// decode the instruction using a switch statement
@@ -186,13 +237,13 @@ int CPU::ProcessX6(int instruction) {
 			break;
 		}
 		case 5: { // OR immediate
-			Regs [dest_reg] = Regs [dest_reg] || value;
+			Regs [dest_reg] = Regs [dest_reg] | value;
 			return 0; // return OK to bypass PCR increment
 			break;
 		
 		}
 		case 6: { // AND immediate
-			Regs [dest_reg] = Regs [dest_reg] && value ;
+			Regs [dest_reg] = Regs [dest_reg] & value ;
 			break;
 		}
 		case 7: { // XOR immediate
@@ -208,19 +259,123 @@ int CPU::ProcessX6(int instruction) {
 	return 0;
 }
 
+// CPU method to handle X5 != 0 (Shift instructions)
+int CPU::ProcessX5(int32_t instruction) {
+
+
+	printf ("Instruction decoded as X5 %08X instruction \n",instruction);
+
+	int code = (instruction >> 20) & 0x0000000F ;// get op code
+	printf("Hex code X6 is %01X \n",code);
+
+	int dest_reg = (instruction >> 16) & 0x0000000F ; // get destination
+	printf("Destination register is 08X \n",dest_reg);
+	
+	int shift_count = instruction & 0x0000001F ;// shift count
+	printf("Shift count is %08X \n",shift_count);
+
+	
+	// decode the instruction using a switch statement
+	switch (code) { 
+		case 1: {  // Shift left logical
+			Regs[dest_reg] = Regs[dest_reg] << shift_count ;
+			break;
+		}
+		case 2: { // Shift right logical
+			Regs[dest_reg] = Regs[dest_reg] << shift_count ;			
+			break;
+		}
+		case 3: { // Shift left arithmetic
+			//!!!!!!!!!!!!!!!! needs overflow check !!!!!!!!!!!!!!!!
+
+			break;
+		}
+		case 4: { // Shift right arithmetic
+			//!!!!!!!!!!!!!!!! needs overflow check !!!!!!!!!!!!!!!!!
+
+			break;
+		}
+		case 5: { // Shift left circular
+			//!!!!!!!!!!!!!!!!!! needs code !!!!!!!!!!!!!!!!!!!
+			break;
+		
+		}
+		case 6: { // Shift right circular
+			//!!!!!!!!!!!!!!!!!!! needs code !!!!!!!!!!!!!!!!!!!!
+			break;
+		}
+	
+		default: { // instruction not implemented
+			return INSTRUCTION_INVALID ;
+		}
+
+	}
+	Regs [PCR_REGISTER]++ ; // increment the program counter			
+	return 0;
+}
+
+// CPU method to handle X4 != 0 (Register to register instructions)
+int CPU::ProcessX4(int32_t instruction) {
+// !!!!!!!!!!!!!!! stub - need code !!!!!!!!!!!!!!!!!!!!!!!!!	
+	Regs [PCR_REGISTER]++ ; // increment the program counter			
+	return 0;
+}	
+
+// CPU method to handle X3 != 0 (Single Register Instructions)
+int CPU::ProcessX3(int32_t instruction) {
+// !!!!!!!!!!!!!!! stub - need code !!!!!!!!!!!!!!!!!!!!!!!!!	
+	Regs [PCR_REGISTER]++ ; // increment the program counter			
+	return 0;
+}
+	
+// CPU method to handle X2 != 0 (Misc instructions)
+int CPU::ProcessX2(int32_t instruction) {	
+// !!!!!!!!!!!!!!! stub - need code !!!!!!!!!!!!!!!!!!!!!!!!!	
+	Regs [PCR_REGISTER]++ ; // increment the program counter			
+	return 0;
+}
+	
+	
+// CPU method for tests, called by console with 'test' command
+
+int CPU::Test(void) { // test code goes here, called by 'test' from console
+	printf("Test routine entered \n") ;
+}
+
 
 
 // ******************************************************************
 //  Class to implement the console interaction
 // ******************************************************************  
+// getarg function parses buffer into arguments, returning number
+// of arguments.
+#define MAX_ARGS 10 
+#define MAX_ARG_SIZE 80 
+int getarg(char *buffer, char argv[][MAX_ARG_SIZE]) {
+
+	int arg_count = 0 ;
+	char* ptr_string ;
+
+	ptr_string = strtok(buffer, " \n");
+	while (ptr_string != NULL) {
+
+
+//		printf(" %d %s\n",arg_count,ptr_string);
+		strcpy(&argv[arg_count][0],ptr_string) ;
+		arg_count++ ;
+		ptr_string = strtok (NULL," \t\n");
+	}
+	return arg_count ;
+}
+
 class Console
 {
 	public:
-	
+		Console() ; // Console constructor
 		int Start();		// Console runs until terminated
 
 	private:
-	
+		CPU cpu ; // CPU object
 		void Print_a_register(int regnum);
 		void Print_all_registers(void);
 		int Get_register_number();
@@ -228,32 +383,55 @@ class Console
 		
 }; // end of Console class definition
 
+Console::Console() {   //Console constructor
+}
 
 // Mainline console method to run the console
 int Console::Start()
 {
-	CPU cpu; //Create the cpu object
-	char inbuf[81];
-	char command[81];
+	char inbuf[81] ; // input buffer
+	char argv [MAX_ARGS][MAX_ARG_SIZE] ; //parsed command
+	int num_args ;  // number of arguments on command including command
 	bool finish = false;
 	do {
 		printf("CONS?> ");
-		scanf("%s",&command);
+		fgets( inbuf,81,stdin);
+		num_args = getarg(inbuf, argv) ; // parse line
 
-		if (strcmp(command,"q") == 0 ) { // quit command
+// empty buffer		
+		if (num_args == 0 ) {  // buffer was empty, do nothing
+		} 
+		
+// "q" quit command
+		else if (strcmp(argv[0],"q") == 0 ) { // quit command
 			finish = true;
 			break;
 		}
 
-		else if (strcmp(command,"xr") == 0){  //examine register command
-			Print_a_register(Get_register_number());
+// "xr" examine register command
+		else if (strcmp(argv[0],"xr") == 0){  //examine register command
+
+			if (num_args > 1 ) { // register number was on command line
+				int reg_number ; 
+				sscanf(argv[1],"%x",&reg_number);
+				Print_a_register(reg_number);
+
+			}
+
+			else {  // none on command line, get it from  user			
+				Print_a_register(Get_register_number());
+				
+			}
+
 		}
 
-		else if (strcmp(command,"xra") == 0){ // examine all registers
+// "xra" examine all registers command
+		else if (strcmp(argv[0],"xra") == 0){ // examine all registers
 			Print_all_registers();
 		}	
 
-		else if (strcmp(command,"help") == 0){ // print help list
+// "help"  help command
+		else if (strcmp(argv[0],"help") == 0){ // print help list
 			printf("CONS>List of all commands \n");
 			printf("help - prints this list \n");
 			printf("xr - examine register, then prompts for register number in hex \n");
@@ -262,61 +440,124 @@ int Console::Start()
 			printf("xm - examine memory, prompt location and number of locs in hex \n");
 			printf("dm - deposit memory,prompt location terminate input with cntrl  \n");
 			printf("s - step a single instruction \n");
+			printf("test - run the test routine \n");
+		}
+
+// "dr"  deposit in register command
+		else if (strcmp(argv[0],"dr") == 0){ // deposit a value in a register
+
+			int reg_number ;
+			int32_t value ; // value to enter in register
 			
+			if (num_args > 1 ) { // register number was on command line
+				sscanf(argv[1],"%x",&reg_number);
+			}
+			else { // register not on command line, get it from user
+				reg_number = Get_register_number() ;
+			}
+			printf("num_args = %d \n",num_args) ;
+			if (num_args > 2) { // value was also on command line
+				sscanf(argv[2],"%x",&value); // decode value
+				
+			}
+			else { // value not on command line, get it from user
+				
+				printf("CONS?>enter value to deposit in hex ");
+				fgets( inbuf,81,stdin);
+				sscanf(inbuf,"%x",&value);
+			}
+			cpu.Store_value_in_register( reg_number, value );  // store the value 
 		}
 
-		else if (strcmp(command,"dr") == 0){ // deposit a value in a register
-			int regnum = Get_register_number();
-			int value;
-			printf("CONS?>enter value to deposit in hex ");
-			scanf("%x",&value);
-			Regs[regnum] = value;  // store the value in the register
-		}
-
-		else if (strcmp(command,"xm") == 0){  // examine memory
+// "xm" examine memory command
+		else if (strcmp(argv[0],"xm") == 0){  // examine memory
 			int address;
 			int number_words;
-			printf("CONS?>enter in hex memory location and number of words ");
-			scanf("%x%x",&address,&number_words);
-			for (int i = 0; i < number_words; i++){
+			
+			if (num_args > 1 ) { // memory address was on command line
+				sscanf(argv[1],"%x",&address);
+			}			
+			
+			else { // address not on command line, get it 
+				printf("CONS?>enter in hex memory location> ");
+				fgets(inbuf,81,stdin);
+				sscanf(inbuf,"%x ",&address) ;
+				printf("\nCONS?>enter number of words in hex> ") ;
+				fgets(inbuf,81,stdin);
+				sscanf(inbuf,"%x ",&number_words) ;
+				
+			}
+
+			if (num_args == 2 ) { // address but no word count was entered
+				printf("CONS?>enter number of words in hex> ") ;
+				fgets(inbuf,81,stdin);
+				sscanf(inbuf,"%x ",&number_words) ;	
+			}
+						
+			if (num_args > 2) { // word count was also on the initial command
+				sscanf(argv[2],"%x",&number_words);
+			}
+				
+
+			for (int i = 0; i < number_words; i++){ // do the dump
 				Print_memory_location(address);
 				address++;
 			}
 		}
 
-		else if (strcmp(command,"dm") == 0) { // deposit memory
+// "dm" deposit memory command
+		else if (strcmp(argv[0],"dm") == 0) { // deposit memory
 			int address;
 			int value;
 			char inbuf[21];
 			char* pointer_string;
-			printf("CONS?>enter the initial memory address to fill>");
-			scanf("%x",&address);
-			printf("CONS> enter consecutive memory values, break with  cntrl d (EOF) \n");
-			printf("CONS %08X contents ?> ",address);
+			
+			if (num_args > 1 ) { // memory address was on command line
+				sscanf(argv[1],"%x",&address);
+			}			
+			
+			else { // address not on command line, get it 
+					printf("CONS> enter beginning memory address> ") ;
+					fgets(inbuf,21,stdin);
+					sscanf(inbuf,"%x ",&address) ;
+			}
+
+			printf("CONS> enter consecutive memory values, break with return only \n");
+			printf("CONS %08X contents? > ",address);
+				
 			do {
 
 				pointer_string=fgets( inbuf,21,stdin);
-				if (inbuf[0] != '\n') {
+//				printf("String length is %d \n",strlen(pointer_string));
+				if (strlen(pointer_string) >1){
 					if (pointer_string != NULL)  {
 						sscanf(pointer_string,"%x",&value);
 						Memory[address] = value;
 						address++;
-						printf("CONS %08X contents ?> ",address);
+						printf("CONS %08X contents? > ",address);
 					}
 
 				}	
 				
-			} while (pointer_string != NULL);
-			printf("\n");
-		} // deposit loop terminates on EOF ctrl/d				
+			} while ( (pointer_string != NULL) && (strlen(pointer_string) > 1) );
 
-		else if (strcmp(command,"s") == 0){ // step an instruction
+		} // deposit loop terminates on empty line of return only				
+
+// "s" single instruction step command
+		else if (strcmp(argv[0],"s") == 0){ // step an instruction
 			cpu.Step();
 		}
 
+// "test" execute test code command
+		else if (strcmp(argv[0],"test") == 0) { //execute test routine
+			cpu.Test();
+		}
+
+// 
 		else {
 			printf("Command not found \n");
 		}
+
 	} while (!finish);
 	
 	printf("Good day \n");
@@ -327,13 +568,22 @@ int Console::Start()
 // Console method to print a register
 void Console::Print_a_register(int reg_number)
 {
-	printf("CON> Register %X = %08X \n",reg_number,Regs[reg_number]);
+	if ( (reg_number >= 0) && (reg_number <NUM_REGISTERS)) {
+		printf("CONS> Register %X = %08X \n",reg_number,
+		  cpu.Get_register_value(reg_number));
+	}
+	else {
+		printf("Illegal register number \n");
+	}
+
+
 	return;
 };	
 	
 // Console method to print all registers
 void Console::Print_all_registers(void)
 {
+
 	for ( int i= 0;i<NUM_REGISTERS;i++) {
 		Print_a_register(i);
 	}
@@ -343,10 +593,12 @@ void Console::Print_all_registers(void)
 // Console method to prompt for and get register number
 int Console::Get_register_number(){
 	int regnum ;
+	char inbuf[81] ;
 	while (true) {
 		
 		printf("CONS Register Number?> ");
-		scanf("%x",&regnum);
+		fgets(inbuf,81,stdin);
+		sscanf(inbuf,"%x",&regnum);
 		if ( (regnum >= 0) && (regnum <NUM_REGISTERS)) {
 			return regnum;
 		}
@@ -355,9 +607,10 @@ int Console::Get_register_number(){
 		}
 	}
 }
+
 // Console method to print a memory location
 void Console::Print_memory_location(int address){
-	printf("CONS> %08X  %08X \n",address,Memory[address]);
+	printf("CONS> %08X %08X \n",address,Memory[address]);
 }				
 
 // Mainline program - just turns control to the console until done 
@@ -367,8 +620,8 @@ int main(void)
 { 
 	printf ("Hello world \n");
 	Console cons ; // Create the console 
-	cons.Start();
-	return 0;
+	return cons.Start();
+	
 	
 }
 
