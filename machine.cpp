@@ -11,6 +11,7 @@
  4/19/17 - shuffle classes, registers now private in CPU
  4/28/17 - improve UI allow multiple args on command line
  4/28/17 - stub out the first level instruction decode
+ 6/22/17 - fix code in CALL instruction
  
  */
  
@@ -21,6 +22,8 @@
 #define NUM_REGISTERS 16
 #define PCR_REGISTER 15  
 #define SP_REGISTER 14
+#define STATUS_REGISTER 0
+#define OVERFLOW_BIT 0x00000001
 #define MEMORY_SIZE 0X10000 // Set to 32k for now,can be expanded to 20 bits
 
 #define INSTRUCTION_INVALID 1 // return code for invalid instruction
@@ -148,23 +151,23 @@ int CPU::Execute(int32_t instruction){
 // CPU method to handle X7 != 0 (Memory reference instructions)
 int CPU::ProcessX7(int32_t instruction) {
 	
-	printf ("Instruction decoded as X7 %08X instruction \n");
+//	printf ("Instruction decoded as X7 %08X instruction \n");
 
 	int code = (instruction >> 28) & 0x0000000F ;// get op code
-	printf("Hex code X7 is %01X \n",code);
+//	printf("Hex code X7 is %01X \n",code);
 	
 	int idx_reg = (instruction >> 24) & 0x0000000F ; // get index reg
-	printf("Index register is %01X \n",idx_reg);
+//	printf("Index register is %01X \n",idx_reg);
 	
 	int dest_reg = (instruction >> 20) & 0x0000000F ; // get destination
-	printf("Destination register is %01X \n",dest_reg);
+//	printf("Destination register is %01X \n",dest_reg);
 	
 	int32_t address = instruction & 0x000FFFFF ;// base address from instruction
-	printf("Base address is %08X \n",address);
+//	printf("Base address is %08X \n",address);
 	
 	if (idx_reg != 0) { // compute effective address
 		address = address +  Regs[idx_reg] ;
-		printf("After index, address is %08X \n",address);
+//		printf("After index, address is %08X \n",address);
 	}
 	
 	// decode the instruction using a switch statement
@@ -187,13 +190,14 @@ int CPU::ProcessX7(int32_t instruction) {
 			Regs [dest_reg] -= Memory [address] ;
 			break;
 		}
-		case 5: { // jump to address
+		case 5: { // branch to address
 			Regs [PCR_REGISTER] = address;
 			return 0; // return OK to bypass PCR increment
 			break;
 		
 		}
 		case 6: { // call
+			Regs [PCR_REGISTER]++; // Increment the program counter by 1 
 			Regs [SP_REGISTER]-- ; // decrement the stack pointer
 			Memory [ Regs [SP_REGISTER] ] = Regs [PCR_REGISTER]; // store return
 			Regs [PCR_REGISTER] = address ; // transfer to address
@@ -212,13 +216,13 @@ int CPU::ProcessX7(int32_t instruction) {
 int CPU::ProcessX6(int32_t instruction) {
 
 
-	printf ("Instruction decoded as X6 %08X instruction \n",instruction);
+//	printf ("Instruction decoded as X6 %08X instruction \n",instruction);
 
 	int code = (instruction >> 24) & 0x0000000F ;// get op code
-	printf("Hex code X6 is %01X \n",code);
+//	printf("Hex code X6 is %01X \n",code);
 
 	int dest_reg = (instruction >> 20) & 0x0000000F ; // get destination
-	printf("Destination register is 08X \n",dest_reg);
+//	printf("Destination register is %08X \n",dest_reg);
 	
 	int32_t value = instruction & 0x000FFFFF ;// immediate value from instruction
 
@@ -226,17 +230,17 @@ int CPU::ProcessX6(int32_t instruction) {
 	if ( (value & 0x0008000) != 0) { // short number is negative
 		signed_value = signed_value | 0xFFF ; // extend sign
 	}
-	printf("Value is %08X \n",value);
-	printf("Value with sign is %08X \n",signed_value) ;
+//	printf("Value is %08X \n",value);
+//	printf("Value with sign is %08X \n",signed_value) ;
 	
 	
 	// decode the instruction using a switch statement
 	switch (code) {
-		case 1: {  // load register immediate
+		case 1: {  // load immediate
 			Regs [dest_reg] = value ;
 			break;
 		}
-		case 2: { // load register signed
+		case 2: { // load immediate arithmetic
 			Regs [dest_reg] = signed_value ;
 			break;
 		}
@@ -277,16 +281,16 @@ int CPU::ProcessX6(int32_t instruction) {
 int CPU::ProcessX5(int32_t instruction) {
 
 
-	printf ("Instruction decoded as X5 type instruction is %08X \n",instruction);
+//	printf ("Instruction decoded as X5 type instruction is %08X \n",instruction);
 
 	int code = (instruction >> 20) & 0x0000000F ;// get op code
-	printf("Hex code X5 is %01X \n",code);
+//	printf("Hex code X5 is %01X \n",code);
 
 	int dest_reg = (instruction >> 16) & 0x0000000F ; // get destination
-	printf("Destination register is 08X \n",dest_reg);
+//	printf("Destination register is 08X \n",dest_reg);
 	
 	int shift_count = instruction & 0x0000001F ;// shift count
-	printf("Shift count is %08X \n",shift_count);
+//	printf("Shift count is %08X \n",shift_count);
 
 	
 	// decode the instruction using a switch statement
@@ -373,16 +377,16 @@ int CPU::ProcessX5(int32_t instruction) {
 // CPU method to handle X4 != 0 (Register to register instructions)
 int CPU::ProcessX4(int32_t instruction) {
 
-	printf ("Instruction decoded as X4 type instruction is %08X \n",instruction);
+//	printf ("Instruction decoded as X4 type instruction is %08X \n",instruction);
 
 	int code = (instruction >> 16) & 0x0000000F ;// get op code
-	printf("Hex code X4 is %01X \n",code);
+//	printf("Hex code X4 is %01X \n",code);
 
 	int dest_reg = (instruction >> 8) & 0x0000000F ; // get destination
-	printf("Destination register is 08X \n",dest_reg);
+//	printf("Destination register is 08X \n",dest_reg);
 	
 	int src_reg = instruction  & 0x0000000F ; // get source register
-	printf("Destination register is 08X \n",dest_reg);	
+//	printf("Destination register is 08X \n",dest_reg);	
 	
 	// decode the instruction using a switch statement
 	switch (code) { 
@@ -455,13 +459,16 @@ int CPU::ProcessX4(int32_t instruction) {
 		}
 		
 		case 0xC: { // skip on overflow
-//!!!!!!!!!!!!!!!!!!!!!11 need code !!!!!!!!!!!!!!!!!!!!!!			
+			if (Regs[STATUS_REGISTER] & OVERFLOW_BIT) {
+				Regs[PCR_REGISTER]++ ;
+			}
 			break;
 		}
 		
 
 		case 0xD: { // skip no overflow
-//!!!!!!!!!!!!!!!!!!!!!! need code !!!!!!!!!!!!!!!!!!!!!!			
+
+			
 			break;
 		}
 		
@@ -477,7 +484,59 @@ int CPU::ProcessX4(int32_t instruction) {
 
 // CPU method to handle X3 != 0 (Single Register Instructions)
 int CPU::ProcessX3(int32_t instruction) {
-// !!!!!!!!!!!!!!! stub - need code !!!!!!!!!!!!!!!!!!!!!!!!!	
+//	printf ("Instruction decoded as X3 type instruction is %08X \n",instruction);
+
+	int code = (instruction >> 12) & 0x0000000F ;// get op code
+//	printf("Hex code X2 is %01X \n",code);
+	
+	int reg = instruction & 0x0000000F ; // get register
+//  printf("Register is %08X \n",reg);
+	
+	// decode the instruction using a switch statement
+	switch (code) { 
+
+		case 1: {  // clear register
+			Regs[reg] = 0 ;
+			break;
+		}
+		
+		case 2: { // invert register
+			Regs[reg] ^ 0xFFFFFFFF ;
+			break;
+		}
+		
+		case 3: { // complement register
+			if (Regs[reg] == 0x80000000) { // check for overflow
+				Regs[0] = Regs[0] | 0x00000001 ; // set overflow bit
+				Regs[0] = 0x7FFFFFF ; // set to max positive allowed
+				break;
+			}
+			else {
+				Regs[0] = Regs[0] & 0xFFFFFFFE ; // clear overflow
+			}
+			
+			Regs[reg] = -Regs[reg]; // no overflow, normal complement
+			break;
+		}
+		
+		case 4: { // Push register
+			Regs[SP_REGISTER]-- ; // decrement stack pointer
+			Memory[ Regs[SP_REGISTER] ] = Regs[reg] ; // push register
+			break;
+		}
+		
+		case 5: { // Pop register
+			Regs[reg] = Memory[ Regs[SP_REGISTER] ] ; // pop register
+			Regs[SP_REGISTER]++ ; // increment stack pointer
+			break;
+		}
+		
+		default: { // invalid instruction
+			return INSTRUCTION_INVALID ;
+		}
+		
+	} // end of switch decode	
+	
 	Regs [PCR_REGISTER]++ ; // increment the program counter			
 	return 0;
 }
@@ -529,10 +588,10 @@ int CPU::ProcessX2(int32_t instruction) {
 int CPU::ProcessX1(int32_t instruction) {	
 
 
-	printf ("Instruction decoded as X1 type instruction is %08X \n",instruction);
+//	printf ("Instruction decoded as X1 type instruction is %08X \n",instruction);
 
 	int code = (instruction >> 4) & 0x0000000F ;// get op code
-	printf("Hex code X1 is %01X \n",code);
+//	printf("Hex code X1 is %01X \n",code);
 
 	// decode the instruction using a switch statement
 	switch (code) { 
@@ -544,7 +603,7 @@ int CPU::ProcessX1(int32_t instruction) {
 		
 		case 2: { // call return
 
-			Regs[PCR_REGISTER] = Regs[SP_REGISTER] ; // go back via stack
+			Regs[PCR_REGISTER] = Memory[Regs[SP_REGISTER]]  ; // go back via stack
 			Regs[SP_REGISTER]++ ; // bump the stack
 			return 0 ; // bypass PCR increment
 		}
